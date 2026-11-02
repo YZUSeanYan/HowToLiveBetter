@@ -31,7 +31,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: book-${{ github.ref }}
@@ -117,10 +117,11 @@ jobs:
 
       - name: 装 pandoc、typst 和中文字体
         run: |
+          set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends fonts-noto-cjk
-          curl -sSL "https://github.com/jgm/pandoc/releases/download/${PANDOC_VERSION}/pandoc-${PANDOC_VERSION}-linux-amd64.tar.gz" | tar xz
-          curl -sSL "https://github.com/typst/typst/releases/download/v${TYPST_VERSION}/typst-x86_64-unknown-linux-musl.tar.xz" | tar xJ
+          curl -fsSL "https://github.com/jgm/pandoc/releases/download/${PANDOC_VERSION}/pandoc-${PANDOC_VERSION}-linux-amd64.tar.gz" | tar xz
+          curl -fsSL "https://github.com/typst/typst/releases/download/v${TYPST_VERSION}/typst-x86_64-unknown-linux-musl.tar.xz" | tar xJ
           echo "$PWD/pandoc-${PANDOC_VERSION}/bin" >> "$GITHUB_PATH"
           echo "$PWD/typst-x86_64-unknown-linux-musl" >> "$GITHUB_PATH"
 
@@ -136,7 +137,7 @@ jobs:
 
       - name: epubcheck
         run: |
-          curl -sSL -o epubcheck.zip https://github.com/w3c/epubcheck/releases/download/v5.4.0/epubcheck-5.4.0.zip
+          curl -fsSL -o epubcheck.zip https://github.com/w3c/epubcheck/releases/download/v5.4.0/epubcheck-5.4.0.zip
           unzip -q epubcheck.zip
           java -jar epubcheck-5.4.0/epubcheck.jar dist/HowToLiveBetter.epub
 
@@ -149,8 +150,21 @@ jobs:
             dist/HowToLiveBetter.html
             dist/HowToLiveBetter.apkg
 
+  # Only this job has write permissions, and it never executes untrusted PR code.
+  publish:
+    name: 发布 Release
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: HowToLiveBetter
+          path: dist
       - name: 发布到 Release epub-latest
-        if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
